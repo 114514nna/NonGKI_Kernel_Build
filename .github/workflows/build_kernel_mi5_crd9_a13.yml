@@ -1,4 +1,4 @@
-name: Build Kernel Xiaomi Mi5
+name: Build Kernel Xiaomi Mi5 crd
 
 on:
   workflow_call:
