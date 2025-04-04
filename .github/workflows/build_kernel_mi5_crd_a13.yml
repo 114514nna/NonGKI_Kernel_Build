@@ -153,54 +153,53 @@ jobs:
           cd $GITHUB_WORKSPACE/device_kernel
           echo "CONFIG_KSU=y" >> ./arch/arm64/configs/vendor/xiaomi/${{ env.DEFCONFIG_NAME }}
           echo ./arch/arm64/configs/vendor/xiaomi/gemini.config >> ./arch/arm64/configs/vendor/xiaomi/${{ env.DEFCONFIG_NAME }}
-          
-      - name: Set Pack Method and KernelSU
-        run: |
-          KERNEL_PATCHES=https://github.com/JackA1ltman/NonGKI_Kernel_Patches.git
-          PACK_METHOD=Anykernel3 # Anykernel3 need SOURCE and BRANCH,but MKBOOTIMG needn't it.
-          KERNELSU_METHOD=shell # shell and manual
 
-          # Set $PACK_METHOD and KernelSU
-          cd $GITHUB_WORKSPACE/device_kernel
-          if [[ $PACK_METHOD == "Anykernel3" ]]; then
-            if [[ -d "Anykernel3" ]]; then
-              echo "Found Anykernel3 in Kernel!"
-            else
-              git clone ${{ env.AK3_SOURCE }} -b ${{ env.AK3_BRANCH }} Anykernel3 --depth=1
-            fi
-          elif [[ $PACK_METHOD == "MKBOOTIMG" ]]; then
-            git clone https://android.googlesource.com/platform/system/tools/mkbootimg $GITHUB_WORKSPACE/mkboottools -b master-kernel-build-2022 --depth=1
-            wget ${{ env.BOOT_SOURCE }} -O $GITHUB_WORKSPACE/boot_source_${{ env.DEVICE_NAME }}.img
-          else
-            exit
-          fi
-          echo "PACK_METHOD=$PACK_METHOD" >> $GITHUB_ENV
+     - name: Set Pack Method and KernelSU 
+       run: |
+    # Variable
+    PACK_METHOD=Anykernel3
+    KERNELSU_METHOD=shell
 
-          if [[ $KERNELSU_METHOD == "shell" ]]; then
-            curl -sSL ${{ env.KERNELSU_SOURCE }} | bash -s ${{ env.KERNELSU_BRANCH }}
-          elif [[ $KERNELSU_METHOD == "manual" ]]; then
-            rm -rf KernelSU && rm -rf KernelSU-Next
-            git clone ${{ env.KERNELSU_SOURCE }} -b ${{ env.KERNELSU_BRANCH }} ${{ env.KERNELSU_NAME }}
-            ln -sf "$(realpath --relative-to="$KERNEL_LOCATION/drivers" "$KERNEL_LOCATION/KernelSU-Next/kernel")" "kernelsu"
-            grep -q "kernelsu" "$KERNEL_LOCATION/drivers/Makefile" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> $KERNEL_LOCATION/drivers/Makefile
-            grep -q "source \"drivers/kernelsu/Kconfig\"" "$KERNEL_LOCATION/drivers/Kconfig" || sed -i "/endmenu/i\source \"drivers/kernelsu/Kconfig\"" "$KERNEL_LOCATION/drivers/Kconfig"
-            echo "KernelSU Settings done."
-          else
-            exit
-          fi
-          echo "KERNELSU_METHOD=$KERNELSU_METHOD" >> $GITHUB_ENV
-          KSU_VERSION=$(cd ${{ env.KERNELSU_NAME }} && expr $(/usr/bin/git rev-list --count HEAD) + 10200)
-          echo "UPLOADNAME=-${{ env.KERNELSU_NAME }}_$KSU_VERSION" >> $GITHUB_ENV
+    # Set $PACK_METHOD and KernelSU
+    KERNEL_LOCATION="$GITHUB_WORKSPACE/device_kernel"  # 明确定义内核路径
+    cd "$KERNEL_LOCATION"
 
-      - name: Extra Kernel Options
-        run: |
-          # Only ${{ env.DEVICE_NAME }} use it.
-          cd $GITHUB_WORKSPACE/device_kernel
-          echo "CONFIG_CPU_BIG_ENDIAN=n" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          echo "CONFIG_COMPAT_VDSO=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          echo "CONFIG_LTO_NONE=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          echo "CONFIG_INIT_STACK_NONE=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          sed -i 's/# CONFIG_SECCOMP is not set/CONFIG_SECCOMP=y/' ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+    # 配置打包方法
+    if [[ $PACK_METHOD == "Anykernel3" ]]; then
+      if [[ -d "Anykernel3" ]]; then
+        echo "Found Anykernel3 in Kernel!"
+      else
+        git clone "${{ env.AK3_SOURCE }}" -b "${{ env.AK3_BRANCH }}" Anykernel3 --depth=1
+      fi
+    elif [[ $PACK_METHOD == "MKBOOTIMG" ]]; then
+      git clone https://android.googlesource.com/platform/system/tools/mkbootimg $GITHUB_WORKSPACE/mkboottools -b master-kernel-build-2022 --depth=1
+      wget "${{ env.BOOT_SOURCE }}" -O "$GITHUB_WORKSPACE/boot_source_${{ env.DEVICE_NAME }}.img"
+    else
+      exit 1  # 明确退出状态码
+    fi
+    echo "PACK_METHOD=$PACK_METHOD" >> $GITHUB_ENV
+
+    # 配置 KernelSU
+    if [[ $KERNELSU_METHOD == "shell" ]]; then
+      curl -sSL "${{ env.KERNELSU_SOURCE }}" | bash -s "${{ env.KERNELSU_BRANCH }}"
+    elif [[ $KERNELSU_METHOD == "manual" ]]; then
+      rm -rf KernelSU KernelSU-Next  # 合并删除命令
+      git clone "${{ env.KERNELSU_SOURCE }}" -b "${{ env.KERNELSU_BRANCH }}" "${{ env.KERNELSU_NAME }}"
+      
+      # 修复动态路径引用
+      ln -sf "$(realpath --relative-to="$KERNEL_LOCATION/drivers" "$KERNEL_LOCATION/${{ env.KERNELSU_NAME }}/kernel")" "kernelsu"
+      
+      # 更安全的文件操作
+      grep -q "kernelsu" "drivers/Makefile" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> "drivers/Makefile"
+      grep -q "source \"drivers/kernelsu/Kconfig\"" "drivers/Kconfig" || sed -i "/endmenu/i\source \"drivers/kernelsu/Kconfig\"" "drivers/Kconfig"
+      echo "KernelSU Settings done."
+    else
+      exit 1
+    fi
+
+    # 版本号计算优化
+    KSU_VERSION=$(cd "${{ env.KERNELSU_NAME }}" && expr $(git rev-list --count HEAD) + 10200)
+    echo "UPLOADNAME=-${{ env.KERNELSU_NAME }}_$KSU_VERSION" >> $GITHUB_ENV
 
       - name: Patch Kernel for no-kprobe
         if: env.NOTHING == 'false'
