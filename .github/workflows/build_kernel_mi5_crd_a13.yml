@@ -1,4 +1,5 @@
 name: Build Kernel Xiaomi Mi5
+
 on:
   workflow_call:
   workflow_dispatch:
@@ -13,6 +14,7 @@ jobs:
       CCACHE_HARDLINK: "true"
     steps:
       - uses: actions/checkout@v4
+
       - name: Prepare Configuration
         run: |
           CONFIG_ENV=$(grep -w "CONFIG_ENV" Profiles/gemini_crd13_a13.env | head -n 1 | cut -d "=" -f 2)
@@ -37,9 +39,7 @@ jobs:
               AK3_SOURCE
               AK3_BRANCH
               ROM_TEXT
-
           )
-          ls -al ./
 
           for CONFIG in "${CONFIG_LIST[@]}"; do
               if [[ "$CONFIG" == "EXTRA_CMDS" || "$CONFIG" == "CUSTOM_CMDS" ]]; then
@@ -62,34 +62,21 @@ jobs:
 
       - name: Install necessary packages
         run: |
-          lsb_release -a
-          UBUNTU_VERSION=$(lsb_release -sr)
           sudo apt-get update
-
-          if [ $UBUNTU_VERSION == "22.04" ]; then
-            sudo apt-get install git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler python2 python3
-            sudo apt-get install p7zip p7zip-full -y
-          else
-            sudo apt-get install git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler python3
-            sudo apt-get install zstd libc6 binutils libc6-dev-i386 gcc g++ p7zip p7zip-full -y
-          fi
+          sudo apt-get install -y git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev squashfs-tools p7zip-full
 
       - name: Set Compile Environment
         run: |
           cd $GITHUB_WORKSPACE
-
-          # Set GCC Aarch64
           if [[ ${{ env.GCC_64_SOURCE }} =~ git ]]; then
             git clone ${{ env.GCC_64_SOURCE }} -b ${{ env.GCC_64_BRANCH }} gcc-64 --depth=1
             export GCC_64_BIN=aarch64-linux-android-
-          fi
-          if [[ ${{ env.GCC_64_SOURCE }} == *'.tar.gz' ]]; then
+          elif [[ ${{ env.GCC_64_SOURCE }} == *'.tar.gz' ]]; then
             wget -O gcc-64.tar.gz ${{ env.GCC_64_SOURCE }}
             mkdir gcc-64
             tar -C gcc-64/ -zxvf gcc-64.tar.gz
             export GCC_64_BIN=aarch64-linux-android-
-          fi
-          if [[ ${{ env.GCC_64_SOURCE }} == *'.zip' ]]; then
+          elif [[ ${{ env.GCC_64_SOURCE }} == *'.zip' ]]; then
             wget -O gcc-64.zip ${{ env.GCC_64_SOURCE }}
             mkdir gcc-64
             unzip gcc-64.zip -d gcc-64/
@@ -97,18 +84,15 @@ jobs:
           fi
           echo "GCC_64=CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-64/bin/$GCC_64_BIN" >> $GITHUB_ENV
 
-          # Set GCC ARM32
           if [[ ${{ env.GCC_32_SOURCE }} =~ git ]]; then
             git clone ${{ env.GCC_32_SOURCE }} -b ${{ env.GCC_32_BRANCH }} gcc-32 --depth=1
             export GCC_32_BIN=arm-linux-androideabi-
-          fi
-          if [[ ${{ env.GCC_32_SOURCE }} == *'.tar.gz' ]]; then
+          elif [[ ${{ env.GCC_32_SOURCE }} == *'.tar.gz' ]]; then
             wget -O gcc-32.tar.gz ${{ env.GCC_32_SOURCE }}
             mkdir gcc-32
             tar -C gcc-32/ -zxvf gcc-32.tar.gz
             export GCC_32_BIN=arm-linux-androideabi-
-          fi
-          if [[ ${{ env.GCC_32_SOURCE }} == *'.zip' ]]; then
+          elif [[ ${{ env.GCC_32_SOURCE }} == *'.zip' ]]; then
             wget -O gcc-32.zip ${{ env.GCC_32_SOURCE }}
             mkdir gcc-32
             unzip gcc-32.zip -d gcc-32/
@@ -116,7 +100,6 @@ jobs:
           fi
           echo "GCC_32=CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc-32/bin/$GCC_32_BIN" >> $GITHUB_ENV
 
-          # Set Clang
           if [[ ${{ env.CLANG_SOURCE }} =~ git ]]; then
             git clone ${{ env.CLANG_SOURCE }} -b ${{ env.CLANG_BRANCH }} clang-custom --depth=1
           elif [[ ${{ env.CLANG_SOURCE }} == *'.tar.gz' ]]; then
@@ -154,52 +137,42 @@ jobs:
           echo "CONFIG_KSU=y" >> ./arch/arm64/configs/vendor/xiaomi/${{ env.DEFCONFIG_NAME }}
           echo ./arch/arm64/configs/vendor/xiaomi/gemini.config >> ./arch/arm64/configs/vendor/xiaomi/${{ env.DEFCONFIG_NAME }}
 
-     - name: Set Pack Method and KernelSU 
-       run: |
-    # Variable
-    PACK_METHOD=Anykernel3
-    KERNELSU_METHOD=shell
+      - name: Set Pack Method and KernelSU 
+        run: |
+          PACK_METHOD=Anykernel3
+          KERNELSU_METHOD=shell
+          KERNEL_LOCATION="$GITHUB_WORKSPACE/device_kernel"
+          cd "$KERNEL_LOCATION"
 
-    # Set $PACK_METHOD and KernelSU
-    KERNEL_LOCATION="$GITHUB_WORKSPACE/device_kernel"  # 明确定义内核路径
-    cd "$KERNEL_LOCATION"
+          if [[ $PACK_METHOD == "Anykernel3" ]]; then
+            if [[ -d "Anykernel3" ]]; then
+              echo "Found Anykernel3 in Kernel!"
+            else
+              git clone "${{ env.AK3_SOURCE }}" -b "${{ env.AK3_BRANCH }}" Anykernel3 --depth=1
+            fi
+          elif [[ $PACK_METHOD == "MKBOOTIMG" ]]; then
+            git clone https://android.googlesource.com/platform/system/tools/mkbootimg $GITHUB_WORKSPACE/mkboottools -b master-kernel-build-2022 --depth=1
+            wget "${{ env.BOOT_SOURCE }}" -O "$GITHUB_WORKSPACE/boot_source_${{ env.DEVICE_NAME }}.img"
+          else
+            exit 1
+          fi
+          echo "PACK_METHOD=$PACK_METHOD" >> $GITHUB_ENV
 
-    # 配置打包方法
-    if [[ $PACK_METHOD == "Anykernel3" ]]; then
-      if [[ -d "Anykernel3" ]]; then
-        echo "Found Anykernel3 in Kernel!"
-      else
-        git clone "${{ env.AK3_SOURCE }}" -b "${{ env.AK3_BRANCH }}" Anykernel3 --depth=1
-      fi
-    elif [[ $PACK_METHOD == "MKBOOTIMG" ]]; then
-      git clone https://android.googlesource.com/platform/system/tools/mkbootimg $GITHUB_WORKSPACE/mkboottools -b master-kernel-build-2022 --depth=1
-      wget "${{ env.BOOT_SOURCE }}" -O "$GITHUB_WORKSPACE/boot_source_${{ env.DEVICE_NAME }}.img"
-    else
-      exit 1  # 明确退出状态码
-    fi
-    echo "PACK_METHOD=$PACK_METHOD" >> $GITHUB_ENV
+          if [[ $KERNELSU_METHOD == "shell" ]]; then
+            curl -sSL "${{ env.KERNELSU_SOURCE }}" | bash -s "${{ env.KERNELSU_BRANCH }}"
+          elif [[ $KERNELSU_METHOD == "manual" ]]; then
+            rm -rf KernelSU KernelSU-Next
+            git clone "${{ env.KERNELSU_SOURCE }}" -b "${{ env.KERNELSU_BRANCH }}" "${{ env.KERNELSU_NAME }}"
+            ln -sf "$(realpath --relative-to="$KERNEL_LOCATION/drivers" "$KERNEL_LOCATION/${{ env.KERNELSU_NAME }}/kernel")" "kernelsu"
+            grep -q "kernelsu" "drivers/Makefile" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> "drivers/Makefile"
+            grep -q "source \"drivers/kernelsu/Kconfig\"" "drivers/Kconfig" || sed -i "/endmenu/i\source \"drivers/kernelsu/Kconfig\"" "drivers/Kconfig"
+            echo "KernelSU Settings done."
+          else
+            exit 1
+          fi
 
-    # 配置 KernelSU
-    if [[ $KERNELSU_METHOD == "shell" ]]; then
-      curl -sSL "${{ env.KERNELSU_SOURCE }}" | bash -s "${{ env.KERNELSU_BRANCH }}"
-    elif [[ $KERNELSU_METHOD == "manual" ]]; then
-      rm -rf KernelSU KernelSU-Next  # 合并删除命令
-      git clone "${{ env.KERNELSU_SOURCE }}" -b "${{ env.KERNELSU_BRANCH }}" "${{ env.KERNELSU_NAME }}"
-      
-      # 修复动态路径引用
-      ln -sf "$(realpath --relative-to="$KERNEL_LOCATION/drivers" "$KERNEL_LOCATION/${{ env.KERNELSU_NAME }}/kernel")" "kernelsu"
-      
-      # 更安全的文件操作
-      grep -q "kernelsu" "drivers/Makefile" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> "drivers/Makefile"
-      grep -q "source \"drivers/kernelsu/Kconfig\"" "drivers/Kconfig" || sed -i "/endmenu/i\source \"drivers/kernelsu/Kconfig\"" "drivers/Kconfig"
-      echo "KernelSU Settings done."
-    else
-      exit 1
-    fi
-
-    # 版本号计算优化
-    KSU_VERSION=$(cd "${{ env.KERNELSU_NAME }}" && expr $(git rev-list --count HEAD) + 10200)
-    echo "UPLOADNAME=-${{ env.KERNELSU_NAME }}_$KSU_VERSION" >> $GITHUB_ENV
+          KSU_VERSION=$(cd "${{ env.KERNELSU_NAME }}" && expr $(git rev-list --count HEAD) + 10200)
+          echo "UPLOADNAME=-${{ env.KERNELSU_NAME }}_$KSU_VERSION" >> $GITHUB_ENV
 
       - name: Patch Kernel for no-kprobe
         if: env.NOTHING == 'false'
@@ -220,7 +193,6 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/device_kernel/
           cp susfs4ksu/kernel_patches/50_add_susfs_in_kernel-$KERNEL_VERSION.patch ./
-
           patch -p1 < 50_add_susfs_in_kernel-${{ env.KERNEL_VERSION }}.patch || true
 
           if [[ "${{ env.KERNELSU_NAME }}"  == "KernelSU-Next" ]]; then
@@ -241,7 +213,6 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/device_kernel/
           cp NonGKI_Kernel_Patches/note4x_aosp_a13/mido_fixed.patch ./
-
           patch -p1 < mido_fixed.patch || true
 
       - name: Setup ccache
