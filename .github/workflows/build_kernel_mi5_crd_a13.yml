@@ -151,8 +151,8 @@ jobs:
       - name: Set KSU for DEFCONFIG
         run: |
           cd $GITHUB_WORKSPACE/device_kernel
-          echo "CONFIG_KSU=y" >> ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          fi
+          echo "CONFIG_KSU=y" >> ./arch/arm64/configs/vendor/xiaomi/${{ env.DEFCONFIG_NAME }}
+          echo ./arch/arm64/configs/vendor/xiaomi/gemini.config >> ./arch/arm64/configs/vendor/xiaomi/${{ env.DEFCONFIG_NAME }}
           
       - name: Set Pack Method and KernelSU
         run: |
